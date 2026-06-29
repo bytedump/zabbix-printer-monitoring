@@ -31,6 +31,34 @@ SNMP_PORT = os.environ.get("MOCK_SNMP_PORT", "1161")
 # Zabbix item type / value-type magic numbers (Zabbix 6.4 API).
 ITEM_TYPE_SNMP = 20
 VALUE_TYPE_UNSIGNED = 3
+PREPROCESS_JAVASCRIPT = 21
+
+# Zabbix trigger severities.
+SEVERITY_WARNING = 2
+SEVERITY_AVERAGE = 3
+SEVERITY_HIGH = 4
+
+# Paper conditions decoded from hrPrinterDetectedErrorState byte 0:
+# (trigger label, bit mask, severity).
+PAPER_TRIGGERS = [
+    ("Paper jam", mib.PAPER_JAM, SEVERITY_HIGH),
+    ("Out of paper", mib.PAPER_OUT, SEVERITY_HIGH),
+    ("Door open", mib.DOOR_OPEN, SEVERITY_AVERAGE),
+    ("Low paper", mib.PAPER_LOW, SEVERITY_WARNING),
+]
+
+# JavaScript preprocessing: reduce the SNMP octet string to the integer value of
+# byte 0, tolerating the shapes net-snmp/Zabbix may return -- a "Hex-STRING:"
+# dump, bare hex pairs, or a raw ASCII byte (e.g. 0x40 -> "@").
+ERRORSTATE_DECODE_JS = (
+    "var v=(value||'').trim();"
+    "var m=v.match(/^Hex-STRING:\\s*([0-9A-Fa-f]{2})/);"
+    "if(m){return parseInt(m[1],16);}"
+    "v=v.replace(/^STRING:\\s*/,'');"
+    "var h=v.match(/^([0-9A-Fa-f]{2})(\\s|$)/);"
+    "if(h){return parseInt(h[1],16);}"
+    "return v.length?v.charCodeAt(0):0;"
+)
 
 
 def ensure_group(auth):
@@ -84,6 +112,38 @@ def create_toner_items(auth, printer, hostid, interfaceid):
         }, auth)
 
 
+def create_errorstate_item(auth, hostid, interfaceid):
+    """Create the SNMP item polling hrPrinterDetectedErrorState, decoding its
+    first byte to an integer so triggers can bitand the paper bits."""
+    zbx.zapi("item.create", {
+        "name": "Printer Error State",
+        "key_": "paper.errorstate",
+        "hostid": hostid,
+        "type": ITEM_TYPE_SNMP,
+        "snmp_oid": mib.HR_PRINTER_DETECTED_ERROR_STATE,
+        "value_type": VALUE_TYPE_UNSIGNED,
+        "delay": "30s",
+        "interfaceid": interfaceid,
+        "preprocessing": [{
+            "type": PREPROCESS_JAVASCRIPT,
+            "params": ERRORSTATE_DECODE_JS,
+            "error_handler": 0,
+            "error_handler_params": "",
+        }],
+    }, auth)
+
+
+def create_paper_triggers(auth, printer):
+    """Create one trigger per paper condition, firing when its bit is set."""
+    host = printer["name"]
+    for label, mask, severity in PAPER_TRIGGERS:
+        zbx.zapi("trigger.create", {
+            "description": f"{label}: {{HOST.NAME}}",
+            "expression": f"bitand(last(/{host}/paper.errorstate),{mask})={mask}",
+            "priority": severity,
+        }, auth)
+
+
 def main():
     zbx.load_env()
     user = os.environ.get("ZABBIX_API_USER", "Admin")
@@ -109,8 +169,10 @@ def main():
             print(f"  host only (offline): {name}")
         else:
             create_toner_items(auth, printer, hostid, interfaceid)
+            create_errorstate_item(auth, hostid, interfaceid)
+            create_paper_triggers(auth, printer)
             created += 1
-            print(f"  registered: {name} ({len(mib.supplies(printer))} toner items)")
+            print(f"  registered: {name} ({len(mib.supplies(printer))} toner items + paper alerts)")
 
     print(f"\nDone: {created} with items, {offline} offline hosts, {skipped} skipped.")
 

@@ -69,7 +69,10 @@ host_items = {}
 for h in hosts:
     if h["host"] == "Zabbix server": continue
     items = zbx.zapi("item.get", {"hostids": h["hostid"], "output": ["name", "lastvalue"]}, zauth)
-    host_items[h["host"]] = items if items else []
+    # Classify on TONER items only. Hosts now also carry a "Printer Error State"
+    # item, so counting all items would push every B&W printer (1 toner + 1
+    # error item) into the Color branch and stop offline hosts reading as empty.
+    host_items[h["host"]] = [it for it in items if it["name"].startswith("Toner Level:")]
 
 # Delete old dashboards
 for d in requests.get(f"{GRAFANA_URL}/search?type=dash-db", auth=AUTH).json():
@@ -100,6 +103,38 @@ panels.append({
                 "content": "# 🖨️ Printer Monitoring — Toner Levels\n\n*Live fleet status · auto-refresh every 30s*"}
 })
 pid += 1; y += 3
+
+# Paper-alert banner: the Zabbix datasource's dedicated Problems panel, scoped to
+# the Printers group. It stays empty while the fleet is healthy and fills with
+# severity-coloured rows (paper jam / out of paper / low paper / door open) when
+# a trigger fires -- the at-a-glance status a wall TV needs. This panel renders
+# problems itself; the datasource routes to its problems handler only on an exact
+# string match, so queryType must be "5" (Problems) -- not a number, not a name.
+BANNER_H = 9
+panels.append({
+    "id": pid, "type": "alexanderzobnin-zabbix-triggers-panel", "datasource": DS,
+    "title": "⚠️ Paper Alerts",
+    "gridPos": {"h": BANNER_H, "w": 24, "x": 0, "y": y},
+    "targets": [{
+        "refId": "A",
+        "datasource": DS,
+        "queryType": "5",
+        "group": {"filter": "/.*/"},
+        "host": {"filter": "/.*/"},
+        "application": {"filter": ""},
+        "proxy": {"filter": ""},
+        "trigger": {"filter": "/Paper jam|Out of paper|Low paper|Door open/"},
+        "options": {"showProblems": "problems", "minSeverity": 0,
+                    "acknowledged": 0, "sortProblems": "severity", "limit": 1001}
+    }],
+    "options": {
+        "severityField": True, "statusField": True, "ackField": False,
+        "descriptionField": True, "showTags": False, "problemTimeline": False,
+        "highlightBackground": True, "sortProblems": "severity",
+        "fontSize": "150%", "pageSize": 15, "layout": "table"
+    }
+})
+pid += 1; y += BANNER_H
 
 GROUP_LABELS = {0: "🎨 Color Printers", 1: "⬛ Black & White Printers", 2: "⛔ Offline"}
 

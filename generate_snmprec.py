@@ -25,6 +25,7 @@ SOURCE = "printers.json" if os.path.exists("printers.json") else "printers.examp
 # snmprec value tags (ASN.1 / SNMP types snmpsim understands).
 TAG_INTEGER = 2
 TAG_OCTET_STRING = 4
+TAG_OCTET_STRING_HEX = "4x"  # OCTET STRING whose value is hex-encoded bytes
 TAG_OBJECT_ID = 6
 TAG_TIME_TICKS = 67
 
@@ -49,6 +50,12 @@ def build_records(printer, printer_index):
             (f"{mib.SUPPLIES_MAX_CAPACITY}.{idx}", TAG_INTEGER, mib.MAX_CAPACITY),
             (f"{mib.SUPPLIES_LEVEL}.{idx}", TAG_INTEGER, level),
         ]
+    # Device-level error state (paper jam / out / low / door) as a 1-byte hex
+    # bit field. 0x00 means no error; demo bytes come from printer_mib.
+    error_byte = mib.error_state_byte(printer["name"])
+    records.append(
+        (mib.HR_PRINTER_DETECTED_ERROR_STATE, TAG_OCTET_STRING_HEX, f"{error_byte:02x}")
+    )
     return records
 
 

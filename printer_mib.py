@@ -31,6 +31,18 @@ SUPPLIES_LEVEL = "1.3.6.1.2.1.43.11.1.1.9.1"  # prtMarkerSuppliesLevel
 # which is exactly the unit the Grafana gauges expect (0-100).
 MAX_CAPACITY = 100
 
+# --- hrPrinterDetectedErrorState (Host-Resources-MIB, RFC 2790) ---
+# A single bit-string column (indexed .1 for the printer device) where each bit
+# flags one error condition. Real Epson WorkForce Pro units populate it, and we
+# poll it (no SNMP traps), so the per-model trap quirks don't apply. We only use
+# byte 0, whose bits map to the masks below (bit 0 is the MSB of the octet).
+HR_PRINTER_DETECTED_ERROR_STATE = "1.3.6.1.2.1.25.3.5.1.2.1"
+
+PAPER_LOW = 0x80  # lowPaper(0)  -> byte 0 bit 7
+PAPER_OUT = 0x40  # noPaper(1)   -> byte 0 bit 6
+DOOR_OPEN = 0x08  # doorOpen(4)  -> byte 0 bit 3
+PAPER_JAM = 0x04  # jammed(5)    -> byte 0 bit 2
+
 # Cartridge codes per ink colour, mirroring the "<code>/<code>" pattern that
 # real Epson WorkForce units report (and that create_dashboard.py parses).
 CARTRIDGE_CODES = {
@@ -50,6 +62,18 @@ MONO_SUPPLIES = ["Black"]
 # inventory should not carry a fake status).
 OFFLINE_DEMO = {"Garage_BW", "Storage_BW"}
 
+# Demo-only: a fixed hrPrinterDetectedErrorState byte per printer so the alert
+# banner has something to show without real hardware. Keyed by the EXAMPLE
+# fleet names on purpose: a real inventory (printers.json) won't match, so real
+# hosts report a clean 0x00 and only show genuine paper errors. Same rule as
+# OFFLINE_DEMO -- never bake a fake status into the real inventory.
+ERROR_STATE_DEMO = {
+    "Finance_BW": PAPER_JAM,
+    "Sales_Color": PAPER_OUT,
+    "Floor2_BW": PAPER_LOW,
+    "Support_BW": DOOR_OPEN,
+}
+
 # Deterministic toner spread. Values are picked so the fleet hits every Grafana
 # threshold band (green >50, yellow 30-50, orange 15-30, red <15) — useful for
 # tuning the dashboard visuals without random noise between runs.
@@ -63,6 +87,11 @@ def community(name):
 
 def is_offline(name):
     return name in OFFLINE_DEMO
+
+
+def error_state_byte(name):
+    """Demo hrPrinterDetectedErrorState byte (0x00 = no error) for a printer."""
+    return ERROR_STATE_DEMO.get(name, 0x00)
 
 
 def supplies(printer):
