@@ -56,6 +56,10 @@ if not zabbix_ds_uid:
 
 print(f"Found Zabbix Data Source UID: {zabbix_ds_uid}")
 
+# Panel-level datasource reference. Grafana 10 (schemaVersion 39) needs this on the
+# panel itself, not only on the target, or panels render empty ("No data").
+DS = {"type": "alexanderzobnin-zabbix-datasource", "uid": zabbix_ds_uid}
+
 inventory = "printers.json" if os.path.exists("printers.json") else "printers.example.json"
 with open(inventory) as f:
     all_printers = json.load(f)
@@ -91,21 +95,39 @@ y = 0
 # Title
 panels.append({
     "id": pid, "type": "text", "title": "", "transparent": True,
-    "gridPos": {"h": 2, "w": 24, "x": 0, "y": y},
-    "options": {"mode": "markdown", "content": "# 🖨️ PRINTER MONITORING — TONER LEVELS"}
+    "gridPos": {"h": 3, "w": 24, "x": 0, "y": y},
+    "options": {"mode": "markdown",
+                "content": "# 🖨️ Printer Monitoring — Toner Levels\n\n*Live fleet status · auto-refresh every 30s*"}
 })
-pid += 1; y += 2
+pid += 1; y += 3
 
+GROUP_LABELS = {0: "🎨 Color Printers", 1: "⬛ Black & White Printers", 2: "⛔ Offline"}
+
+current_group = None
 col = 0
 for printer_name in ordered:
     items = host_items.get(printer_name, [])
     is_color = len(items) > 1
     is_offline = len(items) == 0
+
+    # Emit a section header row whenever the printer group changes.
+    g = sort_key(printer_name)[0]
+    if g != current_group:
+        if col != 0:  # close the partial last row of the previous group
+            y += PANEL_H
+            col = 0
+        panels.append({
+            "id": pid, "type": "row", "title": GROUP_LABELS[g], "collapsed": False,
+            "gridPos": {"h": 1, "w": 24, "x": 0, "y": y}, "panels": []
+        })
+        pid += 1; y += 1
+        current_group = g
+
     x = col * W
 
     if is_offline:
         panels.append({
-            "id": pid, "type": "stat",
+            "id": pid, "type": "stat", "datasource": DS,
             "title": printer_name,
             "gridPos": {"h": PANEL_H, "w": W, "x": x, "y": y},
             "targets": [{
@@ -144,8 +166,8 @@ for printer_name in ordered:
             })
 
         panels.append({
-            "id": pid, "type": "bargauge",
-            "title": printer_name + " 🎨",
+            "id": pid, "type": "bargauge", "datasource": DS,
+            "title": printer_name,
             "gridPos": {"h": PANEL_H, "w": W, "x": x, "y": y},
             "targets": [{
                 "refId": "A",
@@ -158,9 +180,9 @@ for printer_name in ordered:
                 "defaults": {
                     "min": 0, "max": 100, "unit": "percent",
                     "thresholds": {"mode": "absolute", "steps": [
-                        {"color": "dark-red", "value": None}, {"color": "dark-red", "value": 0},
-                        {"color": "orange", "value": 15}, {"color": "yellow", "value": 30},
-                        {"color": "green", "value": 50}
+                        {"color": "red", "value": None},
+                        {"color": "orange", "value": 10}, {"color": "yellow", "value": 20},
+                        {"color": "green", "value": 35}
                     ]},
                     "color": {"mode": "thresholds"}
                 },
@@ -181,8 +203,8 @@ for printer_name in ordered:
         label = f"Black ({code})" if code else "Black"
 
         panels.append({
-            "id": pid, "type": "gauge",
-            "title": f"{printer_name}  [{code}]",
+            "id": pid, "type": "gauge", "datasource": DS,
+            "title": printer_name,
             "gridPos": {"h": PANEL_H, "w": W, "x": x, "y": y},
             "targets": [{
                 "refId": "A",
@@ -195,9 +217,9 @@ for printer_name in ordered:
                 "defaults": {
                     "min": 0, "max": 100, "unit": "percent",
                     "thresholds": {"mode": "absolute", "steps": [
-                        {"color": "dark-red", "value": None}, {"color": "dark-red", "value": 0},
-                        {"color": "orange", "value": 15}, {"color": "yellow", "value": 30},
-                        {"color": "green", "value": 50}
+                        {"color": "red", "value": None},
+                        {"color": "orange", "value": 10}, {"color": "yellow", "value": 20},
+                        {"color": "green", "value": 35}
                     ]},
                     "color": {"mode": "thresholds"}
                 },
