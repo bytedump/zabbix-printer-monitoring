@@ -8,3 +8,6 @@ printers.json
 
 # snmpsim data files are generated from the inventory (see generate_snmprec.py).
 mock/snmp/data/
+
+# Local session handoff notes (contains the local real-inventory backup path).
+HANDOFF.md
