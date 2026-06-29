@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Least privilege: jobs only read the repo.
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+      - name: Byte-compile all scripts
+        run: python -m py_compile *.py
+
+  compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Validate compose file
+        run: docker compose config -q
+
+  leak-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+      - name: gitleaks (secret scan, full history)
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+      - name: Real inventory must stay untracked
+        run: |
+          if git ls-files --error-unmatch printers.json >/dev/null 2>&1; then
+            echo "::error::printers.json (real inventory) must stay gitignored. Commit printers.example.json instead."
+            exit 1
+          fi
+          echo "OK: printers.json is not tracked."
+      - name: No private/internal IPs in tracked files
+        run: |
+          # The example fleet uses the 192.0.2.0/24 documentation range (RFC 5737).
+          # Any RFC 1918 private address in a tracked file likely leaks a real network.
+          if git grep -nE '\b(10\.[0-9]+\.[0-9]+\.[0-9]+|192\.168\.[0-9]+\.[0-9]+|172\.(1[6-9]|2[0-9]|3[01])\.[0-9]+\.[0-9]+)\b' -- . ':!.github/'; then
+            echo "::error::A private/internal IP was found in a tracked file. Use the 192.0.2.0/24 example range."
+            exit 1
+          fi
+          echo "OK: no internal IPs in tracked files."

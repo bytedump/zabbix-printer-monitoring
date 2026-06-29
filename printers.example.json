@@ -1,0 +1,22 @@
+[
+  {"name": "Reception_Color", "model": "Epson WorkForce Pro WF-C579R", "type": "Color", "ip": "192.0.2.10"},
+  {"name": "Finance_BW", "model": "Epson WorkForce Pro WF-M5899", "type": "PB", "ip": "192.0.2.11"},
+  {"name": "HR_BW", "model": "Epson WorkForce Pro WF-M5899", "type": "PB", "ip": "192.0.2.12"},
+  {"name": "Sales_Color", "model": "Epson WorkForce Pro WF-C579R", "type": "Color", "ip": "192.0.2.13"},
+  {"name": "Support_BW", "model": "Epson WorkForce Pro WF-M5899", "type": "PB", "ip": "192.0.2.14"},
+  {"name": "Warehouse_BW", "model": "Epson WorkForce Pro WF-M5899", "type": "PB", "ip": "192.0.2.15"},
+  {"name": "Logistics_BW", "model": "Epson WorkForce Pro WF-M5899", "type": "PB", "ip": "192.0.2.16"},
+  {"name": "Lab_BW", "model": "Epson WorkForce Pro WF-M5899", "type": "PB", "ip": "192.0.2.17"},
+  {"name": "Operations_BW", "model": "Epson WorkForce Pro WF-M5899", "type": "PB", "ip": "192.0.2.18"},
+  {"name": "Engineering_Color", "model": "Epson WorkForce Pro EM-C8100", "type": "Color", "ip": "192.0.2.19"},
+  {"name": "Reprographics_Color", "model": "Epson WorkForce Pro WF-C579R", "type": "Color", "ip": "192.0.2.20"},
+  {"name": "Floor1_BW", "model": "Epson WorkForce Pro WF-M5899", "type": "PB", "ip": "192.0.2.21"},
+  {"name": "Floor2_BW", "model": "Epson WorkForce Pro WF-M5899", "type": "PB", "ip": "192.0.2.22"},
+  {"name": "Floor3_BW", "model": "Epson WorkForce Pro WF-M5899", "type": "PB", "ip": "192.0.2.23"},
+  {"name": "Reception2_BW", "model": "Epson WorkForce Pro WF-M5899", "type": "PB", "ip": "192.0.2.24"},
+  {"name": "Archive_BW", "model": "Epson WorkForce Pro WF-M5899", "type": "PB", "ip": "192.0.2.25"},
+  {"name": "Meeting_BW", "model": "Epson WorkForce Pro WF-M5899", "type": "PB", "ip": "192.0.2.26"},
+  {"name": "Kitchen_BW", "model": "Epson WorkForce Pro WF-M5899", "type": "PB", "ip": "192.0.2.27"},
+  {"name": "Garage_BW", "model": "Epson WorkForce Pro WF-M5899", "type": "PB", "ip": "192.0.2.28"},
+  {"name": "Storage_BW", "model": "Epson WorkForce Pro WF-M5899", "type": "PB", "ip": "192.0.2.29"}
+]

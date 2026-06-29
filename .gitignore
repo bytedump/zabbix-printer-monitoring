@@ -1,0 +1,10 @@
+volumes/
+.env
+__pycache__/
+*.pyc
+
+# Real printer inventory stays local — only printers.example.json is tracked.
+printers.json
+
+# snmpsim data files are generated from the inventory (see generate_snmprec.py).
+mock/snmp/data/

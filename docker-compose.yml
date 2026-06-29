@@ -1,0 +1,74 @@
+services:
+  zabbix-db:
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=zabbix
+      - POSTGRES_PASSWORD=${ZABBIX_DB_PASSWORD:-zabbix}
+      - POSTGRES_DB=zabbix
+    volumes:
+      - ./volumes/postgres:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  zabbix-server:
+    image: zabbix/zabbix-server-pgsql:ubuntu-6.4-latest
+    environment:
+      - DB_SERVER_HOST=zabbix-db
+      - POSTGRES_USER=zabbix
+      - POSTGRES_PASSWORD=${ZABBIX_DB_PASSWORD:-zabbix}
+      - POSTGRES_DB=zabbix
+      - ZBX_STARTPOLLERS=10
+      - ZBX_STARTTRAPPERS=5
+    ports:
+      - "10051:10051"
+    depends_on:
+      - zabbix-db
+    restart: unless-stopped
+
+  zabbix-web:
+    image: zabbix/zabbix-web-nginx-pgsql:ubuntu-6.4-latest
+    environment:
+      - DB_SERVER_HOST=zabbix-db
+      - POSTGRES_USER=zabbix
+      - POSTGRES_PASSWORD=${ZABBIX_DB_PASSWORD:-zabbix}
+      - POSTGRES_DB=zabbix
+      - ZBX_SERVER_HOST=zabbix-server
+      - PHP_TZ=America/Sao_Paulo
+    ports:
+      - "8080:8080"
+    depends_on:
+      - zabbix-db
+      - zabbix-server
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      - GF_INSTALL_PLUGINS=alexanderzobnin-zabbix-app
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+    restart: unless-stopped
+
+  # Fake printer fleet over SNMP — see mock/snmp/. Only reachable inside the
+  # compose network (Zabbix polls snmp-sim:1161); no host port is published.
+  snmp-sim:
+    build: ./mock/snmp
+    volumes:
+      - ./mock/snmp/data:/data:ro
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    mem_limit: 256m
+    pids_limit: 128
+    restart: unless-stopped
+
+# Named volume so Grafana (uid 472) owns its data dir — a host bind mount is
+# created root/host-owned and the container cannot write to it.
+volumes:
+  grafana-data:
