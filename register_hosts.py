@@ -47,6 +47,11 @@ PAPER_TRIGGERS = [
     ("Low paper", mib.PAPER_LOW, SEVERITY_WARNING),
 ]
 
+# A coloured dot prefixed to the trigger name so the dashboard's Problem column
+# shows severity as a clean bullet (the Zabbix problems panel can only render
+# severity as a filled cell otherwise).
+SEVERITY_DOT = {SEVERITY_HIGH: "🔴", SEVERITY_AVERAGE: "🟠", SEVERITY_WARNING: "🟡"}
+
 # JavaScript preprocessing: reduce the SNMP octet string to the integer value of
 # byte 0, tolerating the shapes net-snmp/Zabbix may return -- a "Hex-STRING:"
 # dump, bare hex pairs, or a raw ASCII byte (e.g. 0x40 -> "@").
@@ -137,10 +142,10 @@ def create_paper_triggers(auth, printer):
     """Create one trigger per paper condition, firing when its bit is set."""
     host = printer["name"]
     for label, mask, severity in PAPER_TRIGGERS:
-        # Name is just the condition; the dashboard's Host column already shows
-        # which printer, so "{HOST.NAME}" would only duplicate it.
+        # Name = coloured dot + condition; the dashboard's Host column already
+        # shows which printer, so "{HOST.NAME}" would only duplicate it.
         zbx.zapi("trigger.create", {
-            "description": label,
+            "description": f"{SEVERITY_DOT[severity]} {label}",
             "expression": f"bitand(last(/{host}/paper.errorstate),{mask})={mask}",
             "priority": severity,
         }, auth)

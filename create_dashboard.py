@@ -104,53 +104,12 @@ panels.append({
 })
 pid += 1; y += 3
 
-# Paper-status headline: one big stat that is always visible. It reduces every
-# printer's error-state item to the fleet maximum (0 = nothing wrong) so the wall
-# TV shows a green "ALL PAPER OK" when healthy and flips red the instant any
-# printer reports a paper problem -- the at-a-glance signal the empty problems
-# table can't give. The detail rows live in the banner panel just below.
-HEADLINE_H = 3
-panels.append({
-    "id": pid, "type": "stat", "datasource": DS,
-    "title": "",
-    "gridPos": {"h": HEADLINE_H, "w": 24, "x": 0, "y": y},
-    "targets": [{
-        "refId": "A", "datasource": DS,
-        "queryType": 0,
-        "group": {"filter": "/.*/"}, "host": {"filter": "/.*/"},
-        "application": {"filter": ""}, "item": {"filter": "/Printer Error State/"},
-        "functions": [], "options": {"showDisabledItems": False}
-    }],
-    "transformations": [
-        {"id": "reduce", "options": {"mode": "seriesToRows", "reducers": ["lastNotNull"]}}
-    ],
-    "fieldConfig": {
-        "defaults": {
-            "color": {"mode": "thresholds"},
-            "thresholds": {"mode": "absolute", "steps": [
-                {"color": "green", "value": None}, {"color": "red", "value": 1}]},
-            "mappings": [
-                {"type": "value", "options": {"0": {"text": "✅  ALL PAPER OK", "index": 0}}},
-                {"type": "range", "options": {"from": 1, "to": 1000000,
-                                              "result": {"text": "🚨  PAPER ALERT — see below", "index": 1}}}
-            ],
-            "noValue": "✅  ALL PAPER OK"
-        }, "overrides": []
-    },
-    "options": {
-        "reduceOptions": {"calcs": ["max"], "fields": "", "values": False},
-        "colorMode": "background", "graphMode": "none",
-        "textMode": "value", "justifyMode": "center"
-    }
-})
-pid += 1; y += HEADLINE_H
-
 # Paper-alert banner: the Zabbix datasource's dedicated Problems panel, scoped to
-# the Printers group. It stays empty while the fleet is healthy and fills with
-# severity-coloured rows (paper jam / out of paper / low paper / door open) when
-# a trigger fires -- the at-a-glance status a wall TV needs. This panel renders
-# problems itself; the datasource routes to its problems handler only on an exact
-# string match, so queryType must be "5" (Problems) -- not a number, not a name.
+# the Printers group. It stays empty while the fleet is healthy and lists one
+# clean row per paper problem (jam / out of paper / low paper / door open) when a
+# trigger fires. The panel renders problems itself; the datasource routes to its
+# problems handler only on an exact string match, so queryType must be "5"
+# (Problems) -- not a number, not a name.
 BANNER_H = 8
 panels.append({
     "id": pid, "type": "alexanderzobnin-zabbix-triggers-panel", "datasource": DS,
@@ -169,10 +128,15 @@ panels.append({
                     "acknowledged": 0, "sortProblems": "severity", "limit": 1001}
     }],
     "options": {
-        "severityField": True, "statusField": False, "ackField": False,
-        "descriptionField": True, "showTags": False, "problemTimeline": False,
-        "statusIcon": False, "highlightBackground": True, "sortProblems": "severity",
-        "fontSize": "150%", "pageSize": 50, "layout": "table"
+        # Clean look: severity as coloured text (no filled cell, no row tint),
+        # no Status column, no heart icon, a short HH:mm change time instead of a
+        # full timestamp -- Printer / Severity / Problem / Time.
+        "hostField": True, "hostTechNameField": False,
+        "severityField": False, "statusField": False, "statusIcon": False,
+        "ackField": False, "descriptionField": True, "ageField": False,
+        "showTags": False, "problemTimeline": False, "highlightBackground": False,
+        "customLastChangeFormat": True, "lastChangeFormat": "HH:mm",
+        "sortProblems": "severity", "fontSize": "100%", "pageSize": 50, "layout": "table"
     }
 })
 pid += 1; y += BANNER_H
