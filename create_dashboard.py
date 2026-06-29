@@ -81,7 +81,15 @@ for d in requests.get(f"{GRAFANA_URL}/search?type=dash-db", auth=AUTH).json():
 # Layout: 4 columns x 5 rows = 20 printers
 COLS = 4
 W = 6  # 6 * 4 = 24
-PANEL_H = 5
+
+# Per-section panel heights. Colour panels hold four dials; B&W one big dial;
+# offline a status block.
+GROUP_H = {0: 7, 1: 6, 2: 3}
+
+# Value/label font sizes for TV legibility. B&W gauges show the printer name big;
+# colour gauges pack four dials (CMYK) so their text is smaller.
+BW_GAUGE_TEXT = {"valueSize": 40, "titleSize": 24}
+COLOR_BAR_TEXT = {"valueSize": 34, "titleSize": 22}
 
 def sort_key(name):
     items = host_items.get(name, [])
@@ -128,154 +136,115 @@ panels.append({
                     "acknowledged": 0, "sortProblems": "severity", "limit": 1001}
     }],
     "options": {
-        # Clean look: severity as coloured text (no filled cell, no row tint),
-        # no Status column, no heart icon, a short HH:mm change time instead of a
-        # full timestamp -- Printer / Severity / Problem / Time.
+        # Severity shown as a filled colour block (the bold red/orange/yellow
+        # cell), no Status column, no heart icon, a short HH:mm change time --
+        # Printer / Severity / Problem / Time.
         "hostField": True, "hostTechNameField": False,
-        "severityField": False, "statusField": False, "statusIcon": False,
+        "severityField": True, "statusField": False, "statusIcon": False,
         "ackField": False, "descriptionField": True, "ageField": False,
-        "showTags": False, "problemTimeline": False, "highlightBackground": False,
+        "showTags": False, "problemTimeline": False, "highlightBackground": True,
         "customLastChangeFormat": True, "lastChangeFormat": "HH:mm",
-        "sortProblems": "severity", "fontSize": "100%", "pageSize": 50, "layout": "table"
+        "sortProblems": "severity", "fontSize": "150%", "pageSize": 50, "layout": "table"
     }
 })
 pid += 1; y += BANNER_H
 
 GROUP_LABELS = {0: "🎨 Color Printers", 1: "⬛ Black & White Printers", 2: "⛔ Offline"}
 
-current_group = None
-col = 0
-for printer_name in ordered:
-    items = host_items.get(printer_name, [])
-    is_color = len(items) > 1
-    is_offline = len(items) == 0
+GROUPS = {g: [n for n in ordered if sort_key(n)[0] == g] for g in (0, 1, 2)}
 
-    # Emit a section header row whenever the printer group changes.
-    g = sort_key(printer_name)[0]
-    if g != current_group:
-        if col != 0:  # close the partial last row of the previous group
-            y += PANEL_H
-            col = 0
-        panels.append({
-            "id": pid, "type": "row", "title": GROUP_LABELS[g], "collapsed": False,
-            "gridPos": {"h": 1, "w": 24, "x": 0, "y": y}, "panels": []
-        })
-        pid += 1; y += 1
-        current_group = g
+THRESHOLDS = {"mode": "absolute", "steps": [
+    {"color": "red", "value": None}, {"color": "orange", "value": 10},
+    {"color": "yellow", "value": 20}, {"color": "green", "value": 35}]}
 
-    x = col * W
 
-    if is_offline:
-        panels.append({
-            "id": pid, "type": "stat", "datasource": DS,
-            "title": printer_name,
-            "gridPos": {"h": PANEL_H, "w": W, "x": x, "y": y},
-            "targets": [{
-                "refId": "A",
-                "datasource": {"type": "alexanderzobnin-zabbix-datasource", "uid": zabbix_ds_uid},
-                "queryType": 0, "group": {"filter": "/.*/"}, "host": {"filter": printer_name},
-                "application": {"filter": ""}, "item": {"filter": "/Toner.*/"},
-                "functions": [], "options": {"showDisabledItems": False}
-            }],
-            "fieldConfig": {
-                "defaults": {
-                    "noValue": "OFFLINE",
-                    "color": {"mode": "fixed", "fixedColor": "dark-red"},
-                    "thresholds": {"mode": "absolute", "steps": [{"color": "dark-red", "value": None}]}
-                }, "overrides": []
-            },
-            "options": {
-                "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": False},
-                "colorMode": "background", "graphMode": "none",
-                "textMode": "value", "justifyMode": "center"
-            }
-        })
-    elif is_color:
-        # Extract toner code from item name to use as displayName
+def toner_target(host_filter):
+    """A Zabbix metrics target for the toner items of the matching host(s)."""
+    return {
+        "refId": "A",
+        "datasource": {"type": "alexanderzobnin-zabbix-datasource", "uid": zabbix_ds_uid},
+        "queryType": 0, "group": {"filter": "/.*/"}, "host": {"filter": host_filter},
+        "application": {"filter": ""}, "item": {"filter": "/Toner.*/"},
+        "functions": [], "options": {"showDisabledItems": False},
+    }
+
+
+def row_header(title):
+    global pid, y
+    panels.append({"id": pid, "type": "row", "title": title, "collapsed": False,
+                   "gridPos": {"h": 1, "w": 24, "x": 0, "y": y}, "panels": []})
+    pid += 1; y += 1
+
+
+# --- Colour printers: one wide panel each, four thick ink bars (CMYK), two per
+# row so the bars are long and legible from across the room ---
+if GROUPS[0]:
+    row_header(GROUP_LABELS[0])
+    col = 0
+    W_COLOR, COLS_COLOR = 12, 2
+    for printer_name in GROUPS[0]:
         overrides = []
-        for item in items:
-            # "Toner Level: Black Ink Supply Unit T01D1/T01C1" -> "Black (T01D1)"
-            raw = item["name"].replace("Toner Level: ", "")
-            parts = raw.split(" Ink Supply Unit ")
-            color_name = parts[0] if parts else raw
-            code = parts[1].split("/")[0] if len(parts) > 1 else ""
-            display = f"{color_name} ({code})" if code else color_name
-            overrides.append({
-                "matcher": {"id": "byName", "options": item["name"]},
-                "properties": [{"id": "displayName", "value": display}]
-            })
-
+        for item in host_items.get(printer_name, []):
+            # "Toner Level: Black Ink Supply Unit T01D1/T01C1" -> "Black"
+            color_name = item["name"].replace("Toner Level: ", "").split(" Ink Supply Unit ")[0]
+            overrides.append({"matcher": {"id": "byName", "options": item["name"]},
+                              "properties": [{"id": "displayName", "value": color_name}]})
         panels.append({
-            "id": pid, "type": "bargauge", "datasource": DS,
-            "title": printer_name,
-            "gridPos": {"h": PANEL_H, "w": W, "x": x, "y": y},
-            "targets": [{
-                "refId": "A",
-                "datasource": {"type": "alexanderzobnin-zabbix-datasource", "uid": zabbix_ds_uid},
-                "queryType": 0, "group": {"filter": "/.*/"}, "host": {"filter": printer_name},
-                "application": {"filter": ""}, "item": {"filter": "/Toner.*/"},
-                "functions": [], "options": {"showDisabledItems": False}
-            }],
-            "fieldConfig": {
-                "defaults": {
-                    "min": 0, "max": 100, "unit": "percent",
-                    "thresholds": {"mode": "absolute", "steps": [
-                        {"color": "red", "value": None},
-                        {"color": "orange", "value": 10}, {"color": "yellow", "value": 20},
-                        {"color": "green", "value": 35}
-                    ]},
-                    "color": {"mode": "thresholds"}
-                },
-                "overrides": overrides
-            },
-            "options": {
-                "orientation": "horizontal", "displayMode": "gradient", "showUnfilled": True,
-                "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": False},
-                "minVizHeight": 14, "minVizWidth": 0, "namePlacement": "left",
-                "valueMode": "text"
-            }
-        })
-    else:
-        # B&W - extract code
-        raw = items[0]["name"].replace("Toner Level: ", "")
-        parts = raw.split(" Ink Supply Unit ")
-        code = parts[1].split("/")[0] if len(parts) > 1 else ""
-        label = f"Black ({code})" if code else "Black"
+            "id": pid, "type": "bargauge", "datasource": DS, "title": printer_name,
+            "gridPos": {"h": GROUP_H[0], "w": W_COLOR, "x": col * W_COLOR, "y": y},
+            "targets": [toner_target(printer_name)],
+            "fieldConfig": {"defaults": {"min": 0, "max": 100, "unit": "percent",
+                                         "thresholds": THRESHOLDS, "color": {"mode": "thresholds"}},
+                            "overrides": overrides},
+            "options": {"orientation": "horizontal", "displayMode": "gradient", "showUnfilled": True,
+                        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": False},
+                        "minVizHeight": 28, "minVizWidth": 0, "namePlacement": "left",
+                        "valueMode": "text", "text": COLOR_BAR_TEXT}})
+        pid += 1; col += 1
+        if col >= COLS_COLOR: col = 0; y += GROUP_H[0]
+    if col != 0: y += GROUP_H[0]
 
+# --- B&W printers: one gauge each, the printer name rendered big inside (Black
+# is the only supply, so its dial carries the printer name). ---
+if GROUPS[1]:
+    row_header(GROUP_LABELS[1])
+    col = 0
+    for printer_name in GROUPS[1]:
+        item_name = host_items[printer_name][0]["name"]
         panels.append({
-            "id": pid, "type": "gauge", "datasource": DS,
-            "title": printer_name,
-            "gridPos": {"h": PANEL_H, "w": W, "x": x, "y": y},
-            "targets": [{
-                "refId": "A",
-                "datasource": {"type": "alexanderzobnin-zabbix-datasource", "uid": zabbix_ds_uid},
-                "queryType": 0, "group": {"filter": "/.*/"}, "host": {"filter": printer_name},
-                "application": {"filter": ""}, "item": {"filter": "/Toner.*/"},
-                "functions": [], "options": {"showDisabledItems": False}
-            }],
-            "fieldConfig": {
-                "defaults": {
-                    "min": 0, "max": 100, "unit": "percent",
-                    "thresholds": {"mode": "absolute", "steps": [
-                        {"color": "red", "value": None},
-                        {"color": "orange", "value": 10}, {"color": "yellow", "value": 20},
-                        {"color": "green", "value": 35}
-                    ]},
-                    "color": {"mode": "thresholds"}
-                },
-                "overrides": [{
-                    "matcher": {"id": "byName", "options": items[0]["name"]},
-                    "properties": [{"id": "displayName", "value": label}]
-                }]
-            },
-            "options": {
-                "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": False},
-                "showThresholdMarkers": True, "showThresholdLabels": False
-            }
-        })
+            "id": pid, "type": "gauge", "datasource": DS, "title": "",
+            "gridPos": {"h": GROUP_H[1], "w": W, "x": col * W, "y": y},
+            "targets": [toner_target(printer_name)],
+            "fieldConfig": {"defaults": {"min": 0, "max": 100, "unit": "percent",
+                                         "thresholds": THRESHOLDS, "color": {"mode": "thresholds"}},
+                            "overrides": [{"matcher": {"id": "byName", "options": item_name},
+                                           "properties": [{"id": "displayName", "value": printer_name}]}]},
+            "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": False},
+                        "showThresholdMarkers": True, "showThresholdLabels": False,
+                        "text": BW_GAUGE_TEXT}})
+        pid += 1; col += 1
+        if col >= COLS: col = 0; y += GROUP_H[1]
+    if col != 0: y += GROUP_H[1]
 
-    pid += 1; col += 1
-    if col >= COLS: col = 0; y += PANEL_H
+# --- Offline printers: a red OFFLINE block each ---
+if GROUPS[2]:
+    row_header(GROUP_LABELS[2])
+    col = 0
+    for printer_name in GROUPS[2]:
+        panels.append({
+            "id": pid, "type": "stat", "datasource": DS, "title": printer_name,
+            "gridPos": {"h": GROUP_H[2], "w": W, "x": col * W, "y": y},
+            "targets": [toner_target(printer_name)],
+            "fieldConfig": {"defaults": {"noValue": "OFFLINE",
+                                         "color": {"mode": "fixed", "fixedColor": "dark-red"},
+                                         "thresholds": {"mode": "absolute", "steps": [{"color": "dark-red", "value": None}]}},
+                            "overrides": []},
+            "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": False},
+                        "colorMode": "background", "graphMode": "none",
+                        "textMode": "value", "justifyMode": "center"}})
+        pid += 1; col += 1
+        if col >= COLS: col = 0; y += GROUP_H[2]
+    if col != 0: y += GROUP_H[2]
 
 dashboard = {
     "dashboard": {
