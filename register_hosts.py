@@ -137,8 +137,10 @@ def create_paper_triggers(auth, printer):
     """Create one trigger per paper condition, firing when its bit is set."""
     host = printer["name"]
     for label, mask, severity in PAPER_TRIGGERS:
+        # Name is just the condition; the dashboard's Host column already shows
+        # which printer, so "{HOST.NAME}" would only duplicate it.
         zbx.zapi("trigger.create", {
-            "description": f"{label}: {{HOST.NAME}}",
+            "description": label,
             "expression": f"bitand(last(/{host}/paper.errorstate),{mask})={mask}",
             "priority": severity,
         }, auth)

@@ -169,10 +169,10 @@ panels.append({
                     "acknowledged": 0, "sortProblems": "severity", "limit": 1001}
     }],
     "options": {
-        "severityField": True, "statusField": True, "ackField": False,
+        "severityField": True, "statusField": False, "ackField": False,
         "descriptionField": True, "showTags": False, "problemTimeline": False,
-        "highlightBackground": True, "sortProblems": "severity",
-        "fontSize": "150%", "pageSize": 15, "layout": "table"
+        "statusIcon": False, "highlightBackground": True, "sortProblems": "severity",
+        "fontSize": "150%", "pageSize": 50, "layout": "table"
     }
 })
 pid += 1; y += BANNER_H
